@@ -163,7 +163,7 @@ export default function AnalyticsChart({ scans }) {
             <YAxis stroke="rgba(255,255,255,0.5)" />
             <Tooltip contentStyle={{ backgroundColor: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.1)" }} />
             <Legend />
-            <Bar dataKey="issues" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="issues" fill="#ef4444" radius={[4, 4, 0, 0]} style={{ fill: '#ef4444' }} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -185,7 +185,7 @@ export default function AnalyticsChart({ scans }) {
                 dataKey="value"
               >
                 {issueDistribution.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} style={{ fill: COLORS[index % COLORS.length] }} />
                 ))}
               </Pie>
               <Tooltip
@@ -208,7 +208,7 @@ export default function AnalyticsChart({ scans }) {
               <Tooltip
                 contentStyle={{ backgroundColor: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.1)" }}
               />
-              <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} style={{ fill: '#f59e0b' }} />
             </BarChart>
           </ResponsiveContainer>
         </div>

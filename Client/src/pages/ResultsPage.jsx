@@ -8,6 +8,7 @@ import BeforeAfterComparison from "../components/Results/BeforeAfterComparison"
 import "../styles/pages.css"
 import { useState, useMemo } from "react"
 import { buildExportJSON, buildExportCSV, triggerDownload } from "../services/export.service"
+import { computeQualityScore } from "../services/transformers"
 
 export default function ResultsPage() {
   const { currentScan, issues, suggestions, loadLatest, setSuggestions } = useScan()
@@ -61,6 +62,8 @@ export default function ResultsPage() {
     }
   }
 
+  const displayScore = computeQualityScore(renderIssues)
+
   return (
     <div className="results-page">
       <div className="results-container">
@@ -72,9 +75,8 @@ export default function ResultsPage() {
           <div className="score-badge">
             <span className="score-label">Quality Score</span>
             <span
-              className={`score-value ${currentScan.score >= 80 ? "excellent" : currentScan.score >= 60 ? "good" : "needs-improvement"}`}
-            >
-              {currentScan.score}%
+              className={`score-value ${displayScore >= 80 ? "excellent" : displayScore >= 60 ? "good" : "needs-improvement"}`}>
+              {displayScore}%
             </span>
           </div>
         </div>
