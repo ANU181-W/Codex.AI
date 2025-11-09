@@ -1,11 +1,12 @@
 import { useRef, useState } from "react"
-import { Upload, FileText, X, FolderOpen } from "lucide-react"
+import { Upload, FileText, X } from "lucide-react"
+import { notify } from "../../services/notify"
+import { useProject } from "../../contexts/ProjectContext"
 
 export default function FileUploader({ onFilesSelected }) {
   const [isDragActive, setIsDragActive] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState([])
-  const [projectName, setProjectName] = useState("")
-  const [showProjectInput, setShowProjectInput] = useState(false)
+  const { projects, currentProject } = useProject()
   const inputRef = useRef(null)
   const folderInputRef = useRef(null)
 
@@ -38,7 +39,7 @@ export default function FileUploader({ onFilesSelected }) {
     const validFiles = files.filter((file) => /\.(jsx|tsx|js|ts|html|css|scss|less)$/.test(file.name))
 
     if (validFiles.length === 0) {
-      alert("Please select valid code files (.jsx, .tsx, .js, .ts, .html, .css)")
+      notify.warn("Select valid code files (.jsx, .tsx, .js, .ts, .html, .css, .scss, .less)")
       return
     }
 
@@ -47,22 +48,18 @@ export default function FileUploader({ onFilesSelected }) {
 
   const handleUpload = () => {
     if (selectedFiles.length === 0) {
-      alert("Please select files first")
+      notify.info("Please select files first")
       return
     }
-    if (!projectName.trim()) {
-      alert("Please enter a project name")
-      setShowProjectInput(true)
+    if (!currentProject?.id) {
+      notify.warn("Select a project before scanning")
       return
     }
-    onFilesSelected(selectedFiles, projectName.trim())
+    onFilesSelected(selectedFiles, currentProject.name)
   }
 
   const handleFilesProcessed = (files) => {
     setSelectedFiles(files)
-    if (files.length > 0 && !projectName) {
-      setShowProjectInput(true)
-    }
   }
 
   const removeFile = (index) => {
@@ -130,28 +127,9 @@ export default function FileUploader({ onFilesSelected }) {
           <div className="selected-files-header">
             <h4>Selected Files ({selectedFiles.length})</h4>
           </div>
-          
-          {(showProjectInput || !projectName) && (
-            <div className="project-name-input-section">
-              <label className="project-name-label">
-                <FolderOpen size={18} />
-                <span>Project Name</span>
-              </label>
-              <input
-                type="text"
-                className="project-name-input"
-                placeholder="Enter project name (e.g., My Web App)"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && projectName.trim()) {
-                    handleUpload()
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-          )}
+          <div className="project-selection-hint">
+            <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>Project: {currentProject ? currentProject.name : '— select above'}</span>
+          </div>
 
           <div className="files-list">
             {selectedFiles.map((file, idx) => (
@@ -176,7 +154,7 @@ export default function FileUploader({ onFilesSelected }) {
           <button 
             className="btn-scan-modern" 
             onClick={handleUpload}
-            disabled={!projectName.trim()}
+            disabled={!currentProject?.id}
           >
             Start Scan
           </button>

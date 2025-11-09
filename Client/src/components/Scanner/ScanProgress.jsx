@@ -28,6 +28,18 @@ export default function ScanProgress({ progress }) {
           <div className="scan-line"></div>
           <div className="scan-line"></div>
         </div>
+
+        <div className="ai-loader-text mt-4 text-sm opacity-80 tracking-wider">
+          <span className="dot">c</span>
+          <span className="dot">o</span>
+          <span className="dot">d</span>
+          <span className="dot">e</span>
+          <span className="dot">x</span>
+          <span className="dot">.</span>
+          <span className="dot">A</span>
+          <span className="dot">i</span>
+          <span className="ml-2 animate-pulse">is scanning...</span>
+        </div>
       </div>
     </div>
   )

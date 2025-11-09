@@ -28,16 +28,24 @@ export const issueValidationService = {
   // Filter issues by severity level
   filterBySeverity: (issues, severityLevel) => {
     const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 }
-    return issues.filter((issue) => severityOrder[issue.severity] >= severityOrder[severityLevel])
+    const target = (severityLevel || '').toLowerCase()
+    return issues.filter((issue) => {
+      const sev = (issue.severity || '').toLowerCase()
+      return (severityOrder[sev] || 0) >= (severityOrder[target] || 0)
+    })
   },
 
   // Group issues by category for better organization
   groupByCategory: (issues) => {
+    const pretty = (cat) => {
+      const withSpaces = String(cat || 'other').replace(/_/g, ' ')
+      return withSpaces.replace(/\b\w/g, (m) => m.toUpperCase())
+    }
     return issues.reduce((acc, issue) => {
-      const category = issue.category || "other"
+      const category = (issue.category || "other").toLowerCase()
       if (!acc[category]) {
         acc[category] = {
-          name: category.charAt(0).toUpperCase() + category.slice(1),
+          name: pretty(category),
           count: 0,
           issues: [],
           critical: 0,
@@ -46,9 +54,10 @@ export const issueValidationService = {
           low: 0,
         }
       }
-      acc[category].issues.push(issue)
+      acc[category].issues.push({ ...issue, category })
       acc[category].count++
-      acc[category][issue.severity]++
+      const sev = (issue.severity || '').toLowerCase()
+      if (acc[category][sev] !== undefined) acc[category][sev]++
       return acc
     }, {})
   },
@@ -64,9 +73,10 @@ export const issueValidationService = {
     }
 
     issues.forEach((issue) => {
-      stats.bySeverity[issue.severity]++
+      const sev = (issue.severity || '').toLowerCase()
+      if (stats.bySeverity[sev] !== undefined) stats.bySeverity[sev]++
 
-      const category = issue.category || "other"
+      const category = (issue.category || "other").toLowerCase()
       if (!stats.byCategory[category]) {
         stats.byCategory[category] = 0
       }
@@ -74,7 +84,7 @@ export const issueValidationService = {
 
       // Estimate fix time based on severity (in minutes)
       const timeMap = { critical: 30, high: 20, medium: 10, low: 5 }
-      stats.estimatedFixTime += timeMap[issue.severity] || 5
+      stats.estimatedFixTime += timeMap[sev] || 5
     })
 
     // Calculate risk score (0-100)
@@ -97,7 +107,7 @@ export const issueValidationService = {
 
     if (
       !issue.category ||
-      !["accessibility", "security", "performance", "seo", "structure", "i18n"].includes(issue.category)
+      !["accessibility", "security", "performance", "seo", "structure", "i18n", "design", "best-practices"].includes(issue.category)
     ) {
       errors.push("Issue category is invalid")
     }
@@ -144,12 +154,16 @@ export const issueValidationService = {
     }
 
     return [...issues].sort((a, b) => {
-      const priorityDiff = priorityMap[a.severity] - priorityMap[b.severity]
+      const aSev = (a.severity || '').toLowerCase()
+      const bSev = (b.severity || '').toLowerCase()
+      const priorityDiff = (priorityMap[aSev] || 99) - (priorityMap[bSev] || 99)
       if (priorityDiff !== 0) return priorityDiff
 
       // Secondary sort by category importance
       const categoryPriority = { security: 1, accessibility: 2, performance: 3, seo: 4, structure: 5, i18n: 6 }
-      return (categoryPriority[a.category] || 7) - (categoryPriority[b.category] || 7)
+      const aCat = (a.category || '').toLowerCase()
+      const bCat = (b.category || '').toLowerCase()
+      return (categoryPriority[aCat] || 7) - (categoryPriority[bCat] || 7)
     })
   },
 

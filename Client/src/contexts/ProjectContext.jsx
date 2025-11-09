@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react"
 import { ProjectAPI } from "../services/api"
+import { notify } from "../services/notify"
 
 const ProjectContext = createContext()
 
@@ -15,30 +16,54 @@ export function ProjectProvider({ children }) {
       try {
         const list = await ProjectAPI.list()
         if (mounted) setProjects(Array.isArray(list) ? list : [])
+        notify.info(`Loaded ${list?.length || 0} projects`)  
+        // Auto-select first project if none chosen yet so dependent pages (Results) have context
+        if (mounted && (!currentProject || !currentProject.id) && Array.isArray(list) && list.length > 0) {
+          setCurrentProject(list[0])
+        }
       } catch (e) {
         console.error("Failed to load projects:", e)
+        notify.error("Failed to load projects")
       }
     })()
     return () => { mounted = false }
-  }, [])
+  }, [currentProject])
 
   const addProject = useCallback(async (projectData) => {
-    const created = await ProjectAPI.create(projectData)
-    setProjects((prev) => [...prev, created])
-    return created
+    try {
+      const created = await ProjectAPI.create(projectData)
+      setProjects((prev) => [...prev, created])
+      notify.success(`Project '${created.name}' created`)
+      return created
+    } catch (e) {
+      notify.error(e.message || 'Project creation failed')
+      throw e
+    }
   }, [])
 
   const updateProject = useCallback(async (projectId, updates) => {
-    const updated = await ProjectAPI.update(projectId, updates)
-    setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)))
-    if (currentProject?.id === projectId) setCurrentProject(updated)
-    return updated
+    try {
+      const updated = await ProjectAPI.update(projectId, updates)
+      setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)))
+      if (currentProject?.id === projectId) setCurrentProject(updated)
+      notify.success('Project updated')
+      return updated
+    } catch (e) {
+      notify.error(e.message || 'Update failed')
+      throw e
+    }
   }, [currentProject])
 
   const deleteProject = useCallback(async (projectId) => {
-    await ProjectAPI.delete(projectId)
-    setProjects((prev) => prev.filter((p) => p.id !== projectId))
-    if (currentProject?.id === projectId) setCurrentProject(null)
+    try {
+      await ProjectAPI.delete(projectId)
+      setProjects((prev) => prev.filter((p) => p.id !== projectId))
+      if (currentProject?.id === projectId) setCurrentProject(null)
+      notify.warn('Project deleted')
+    } catch (e) {
+      notify.error(e.message || 'Delete failed')
+      throw e
+    }
   }, [currentProject])
 
   // Keeps old signature so existing UI can append local history, optional

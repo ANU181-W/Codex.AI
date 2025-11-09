@@ -24,7 +24,35 @@ exports.uploadFiles = async (req, res) => {
     }
     
     const uploadedFiles = [];
-    const supportedExtensions = ['.html', '.jsx', '.tsx', '.css', '.scss'];
+    // Allow .css, .tsx, .ts, .html, .js (and keep jsx/scss)
+    const supportedExtensions = ['.html', '.jsx', '.tsx', '.ts', '.js', '.css', '.scss'];
+
+    const mapSeverity = (sev) => {
+      const s = String(sev || '').toUpperCase();
+      switch (s) {
+        case 'CRITICAL':
+        case 'HIGH':
+        case 'MEDIUM':
+        case 'LOW':
+        case 'INFO':
+          return s;
+        default:
+          return 'LOW';
+      }
+    };
+
+    const mapCategory = (cat) => {
+      const c = String(cat || '').toLowerCase();
+      if (c === 'accessibility' || c === 'a11y') return 'ACCESSIBILITY';
+      if (c === 'security') return 'SECURITY';
+      if (c === 'performance') return 'PERFORMANCE';
+      if (c === 'seo') return 'SEO';
+      if (c === 'i18n' || c === 'internationalization') return 'I18N';
+      if (c === 'design' || c === 'design-system' || c === 'css') return 'DESIGN_SYSTEM';
+      if (c === 'best-practices' || c === 'best_practices' || c === 'best_practice') return 'BEST_PRACTICE';
+      if (c === 'typescript' || c === 'ts' || c === 'js' || c === 'jsx' || c === 'tsx' || c === 'structure' || c === 'structural') return 'STRUCTURAL';
+      return 'BEST_PRACTICE';
+    };
     
     for (const file of files) {
       const ext = path.extname(file.originalname).toLowerCase();
@@ -47,11 +75,18 @@ exports.uploadFiles = async (req, res) => {
         filename: file.originalname,
       });
       
+      const mapFileTypeForPrisma = (t) => {
+        // Prisma FileType enum does not include JS/TS; map to closest buckets used by scanner
+        if (t === 'JS') return 'JSX';
+        if (t === 'TS') return 'TSX';
+        return t;
+      };
+
       const fileData = {
         projectId,
         filename: file.originalname,
         path: file.originalname,
-        type: parsedFile.type,
+        type: mapFileTypeForPrisma(parsedFile.type),
         content,
         hash: parsedFile.hash,
         size: file.size,
@@ -102,21 +137,57 @@ exports.uploadFiles = async (req, res) => {
         }
 
         // Then create any issues found during analysis (fresh set)
+        let createdIssues = []
         if (analysis.issues && analysis.issues.length > 0) {
           console.log(`Creating ${analysis.issues.length} issues for file id=${savedFile.id}`);
-          await Promise.all(analysis.issues.map(issue => 
+          createdIssues = await Promise.all(analysis.issues.map(issue => 
             prisma.issue.create({
               data: {
                 fileId: savedFile.id,
-                category: issue.category.toUpperCase(),
-                severity: issue.severity.toUpperCase(),
-                title: issue.message,
-                message: issue.message,
+                category: mapCategory(issue.category),
+                severity: mapSeverity(issue.severity),
+                title: issue.title || issue.message || 'Issue',
+                message: issue.message || issue.title || '',
+                line: issue.line,
+                column: issue.column,
                 code: issue.code,
+                rule: issue.rule,
                 status: 'OPEN'
               }
             })
           ));
+
+          // Create AI-generated Fix records when suggestions are present
+          const suggestions = Array.isArray(analysis.suggestions) ? analysis.suggestions : []
+          if (suggestions.length > 0) {
+            const byCategory = suggestions.reduce((acc, s) => {
+              const key = String(s.category || '').toUpperCase()
+              if (!acc[key]) acc[key] = []
+              acc[key].push(s)
+              return acc
+            }, {})
+            await Promise.all(createdIssues.map((iss) => {
+              const cat = iss.category // already Prisma enum
+              const pool = byCategory[cat] || byCategory[cat?.toUpperCase?.() || ''] || []
+              const picked = pool.length ? pool.shift() : null
+              if (!picked) return Promise.resolve()
+              const generatedContent = picked.example || (Array.isArray(picked.changes) ? picked.changes.join('\n') : null)
+              const rationale = picked.rationale || picked.description || ''
+              if (!generatedContent && !rationale) return Promise.resolve()
+              return prisma.fix.create({
+                data: {
+                  issueId: iss.id,
+                  patchDiff: generatedContent ? `--- before\n+++ after\n${generatedContent}` : '',
+                  rationale,
+                  aiGenerated: true,
+                  aiModel: analysis?.aiMeta?.model || null,
+                  generatedContent,
+                  confidence: analysis?.aiMeta?.usage ? 0.8 : 0.7,
+                  applied: false,
+                }
+              })
+            }))
+          }
         } else {
           console.log(`No issues to create for file id=${savedFile.id}`);
         }

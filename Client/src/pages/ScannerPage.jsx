@@ -6,12 +6,15 @@ import ScanOptions from "../components/Scanner/ScanOptions"
 import ScanProgress from "../components/Scanner/ScanProgress"
 import { useProject } from "../contexts/ProjectContext"
 import { FileAPI } from "../services/api"
+import { computeQualityScore } from "../services/transformers"
+import { notify } from "../services/notify"
 import "../styles/pages.css"
+import ProjectSelect from "../components/Projects/ProjectSelect"
 
 export default function ScannerPage() {
   const navigate = useNavigate()
-  const { addScan, setCurrentScan, setIssues, updateScan, startScan } = useScan()
-  const { currentProject, addProject, setCurrentProject } = useProject()
+  const { addScan, setCurrentScan, setIssues, setSuggestions, updateScan, startScan } = useScan()
+  const { currentProject, addProject, setCurrentProject, projects } = useProject()
   const [scanning, setScanning] = useState(false)
   const [progress, setProgress] = useState(0)
   const [scanOptions, setScanOptions] = useState({
@@ -31,14 +34,20 @@ export default function ScannerPage() {
       // Ensure backend project exists
       let project = currentProject
       if (!project) {
-        project = await addProject({ name: projectName || "New Project" })
+        // Enforce project-first flow: require existing or explicit name
+        if (!projectName) {
+          setScanning(false)
+          notify.warn('Please select or create a project before uploading')
+          return
+        }
+        project = await addProject({ name: projectName })
         setCurrentProject(project)
       }
 
       const fileNames = files.map(file => file.name)
 
       const scan = addScan({
-        projectName: projectName || "New Project",
+        projectName: project?.name,
         filesCount: files.length,
         fileNames: fileNames,
         status: "scanning",
@@ -49,28 +58,74 @@ export default function ScannerPage() {
 
       setCurrentScan(scan)
 
-      // Upload files to backend
-      await FileAPI.upload(project.id, files)
-      setProgress(60)
+      // Upload files to backend and immediately use AI issues from response
+  notify.info('Uploading files...')
+  const uploadSummary = await FileAPI.upload(project.id, files)
+      setProgress(70)
 
-      // Start backend scan and fetch results
-      const started = await startScan(project.id)
-      setIssues(started.issues)
+      const immediateIssues = Array.isArray(uploadSummary?.files)
+        ? uploadSummary.files.flatMap(f => f.issues || [])
+        : []
+      // Build suggestions from backend AI analysis per file, mapped to issues by category/line
+      const immediateSuggestions = Array.isArray(uploadSummary?.files)
+        ? uploadSummary.files.flatMap(f => {
+            const suggs = (f.analysis && Array.isArray(f.analysis.suggestions)) ? f.analysis.suggestions : []
+            const byCategory = suggs.reduce((acc, s) => {
+              const key = String(s.category || '').toLowerCase()
+              if (!acc[key]) acc[key] = []
+              acc[key].push(s)
+              return acc
+            }, {})
+            return (f.issues || []).map((iss, idx) => {
+              const key = String(iss.category || '').toLowerCase()
+              const matched = (byCategory[key] && byCategory[key].length) ? byCategory[key].shift() : null
+              const suggested = matched?.example || (Array.isArray(matched?.changes) ? matched.changes.join('\n') : iss.suggestion || '')
+              return {
+                id: `${f.filename}-${iss.line || idx}`,
+                issueId: iss.id || `${f.filename}:${iss.line}:${iss.column || ''}`,
+                title: matched?.description || iss.title || 'AI suggestion',
+                category: key,
+                severity: (iss.severity || '').toLowerCase(),
+                file: f.filename,
+                line: iss.line,
+                original: iss.code || '',
+                suggested,
+                rationale: matched?.rationale || '',
+                confidence: 0.8,
+                explanation: matched?.description || ''
+              }
+            })
+          })
+        : []
+      const immediateScore = computeQualityScore(immediateIssues)
 
+  setIssues(immediateIssues)
+  setSuggestions(immediateSuggestions)
+
+      const updated = {
+        ...scan,
+        issues: immediateIssues,
+        score: immediateScore,
+        status: "completed",
+      }
       updateScan(scan.id, {
-        issues: started.issues,
-        score: started.score,
+        issues: immediateIssues,
+        score: immediateScore,
         status: "completed",
       })
+  setCurrentScan(updated)
+
+      // Optionally kick off a formal scan in the background to populate dashboard history
+  startScan(project.id, project.name).catch(() => {})
 
       setProgress(100)
       setScanning(false)
 
-  setTimeout(() => navigate("/results"), 500)
+  setTimeout(() => navigate("/results"), 300)
     } catch (error) {
       console.error("Scan error:", error)
       setScanning(false)
-      alert("Error during scan: " + error.message)
+      notify.error(error.message || 'Error during scan')
     }
   }
 
@@ -85,6 +140,7 @@ export default function ScannerPage() {
             </div>
             
             <div className="scanner-content">
+              <ProjectSelect />
               <ScanOptions options={scanOptions} onChange={setScanOptions} />
               <FileUploader onFilesSelected={handleFilesSelected} />
             </div>

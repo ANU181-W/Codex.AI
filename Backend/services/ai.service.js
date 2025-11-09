@@ -14,6 +14,8 @@ const {
   analyzePerformance,
   analyzeI18n,
   validateDesignSystem,
+  analyzeStructure,
+  analyzeAdditionalHTMLHeuristics,
 } = require('./analyzers');
 
 class AIService {
@@ -71,6 +73,8 @@ class AIService {
         performanceIssues,
         i18nIssues,
         designIssues,
+        structureIssues,
+        extraHtmlIssues,
       ] = await Promise.all([
         analyzeAccessibility(content, type),
         analyzeSecurity(content, type),
@@ -78,6 +82,8 @@ class AIService {
         analyzePerformance(content, type),
         analyzeI18n(content, type),
         validateDesignSystem(content, type),
+        analyzeStructure(content, type),
+        analyzeAdditionalHTMLHeuristics(content, type),
       ]);
 
       // Combine all issues
@@ -88,6 +94,8 @@ class AIService {
         ...performanceIssues,
         ...i18nIssues,
         ...designIssues,
+        ...structureIssues,
+        ...extraHtmlIssues,
       ];
 
       // Calculate metrics based on issues

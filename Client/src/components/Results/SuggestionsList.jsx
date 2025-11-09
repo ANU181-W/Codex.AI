@@ -1,22 +1,28 @@
 import { useState, useMemo } from "react"
 import { aiSuggestionsService } from "../../services/aiSuggestionsService"
 
-export default function SuggestionsList({ issues }) {
+export default function SuggestionsList({ issues, suggestionsOverride }) {
   const [appliedSuggestions, setAppliedSuggestions] = useState(new Set())
   const [expandedId, setExpandedId] = useState(null)
   const [showImplementationGuide, setShowImplementationGuide] = useState(null)
   const [copiedId, setCopiedId] = useState(null)
 
   const suggestions = useMemo(() => {
+    if (Array.isArray(suggestionsOverride) && suggestionsOverride.length) {
+      return suggestionsOverride
+    }
     return aiSuggestionsService.generateSuggestions(issues)
-  }, [issues])
+  }, [issues, suggestionsOverride])
 
   const prioritized = useMemo(() => aiSuggestionsService.prioritizeSuggestions(suggestions), [suggestions])
 
-  const batchImpact = useMemo(
-    () => aiSuggestionsService.calculateBatchImpact(suggestions.map((s) => ({ issue: issues[s.id] }))),
-    [suggestions, issues],
-  )
+  const batchImpact = useMemo(() => {
+    const resolved = suggestions.map((s) => {
+      const match = issues.find((i) => (i.id && s.issueId && i.id === s.issueId) || (i.file === s.file && i.line === s.line)) || {}
+      return { issue: match }
+    })
+    return aiSuggestionsService.calculateBatchImpact(resolved)
+  }, [suggestions, issues])
 
   const handleApplySuggestion = (id) => {
     setAppliedSuggestions(new Set([...appliedSuggestions, id]))
@@ -63,7 +69,7 @@ export default function SuggestionsList({ issues }) {
       </div>
 
       {prioritized.map((suggestion) => {
-        const issue = issues[suggestion.id] || issues[suggestion.issueId] || suggestion
+  const issue = issues.find((i) => (i.id && suggestion.issueId && i.id === suggestion.issueId) || (i.file === suggestion.file && i.line === suggestion.line)) || suggestion
         const timeEstimate = aiSuggestionsService.estimateFixTime(issue)
         const isExpanded = expandedId === suggestion.id
         const isApplied = appliedSuggestions.has(suggestion.id)
@@ -77,6 +83,9 @@ export default function SuggestionsList({ issues }) {
                 <div className="suggestion-info">
                   <span className="suggestion-title">{suggestion.title || issue.title || "Code Improvement"}</span>
                   <span className="suggestion-category">{suggestion.category}</span>
+                  {(suggestion.file || issue.file) && (
+                    <span className="suggestion-file">{(suggestion.file || issue.file)}{(suggestion.line || issue.line) ? `:${suggestion.line || issue.line}` : ""}</span>
+                  )}
                 </div>
               </div>
               <div className="suggestion-right">
@@ -120,7 +129,7 @@ export default function SuggestionsList({ issues }) {
                         <span className="file-info">{suggestion.file}{suggestion.line && `:${suggestion.line}`}</span>
                       )}
                     </div>
-                    <pre><code>{suggestion.original || "No code available"}</code></pre>
+                    <pre><code>{suggestion.original || issue.code || "No code available"}</code></pre>
                     <button
                       className="copy-btn"
                       onClick={() => handleCopyCode(suggestion.original, `orig-${suggestion.id}`)}

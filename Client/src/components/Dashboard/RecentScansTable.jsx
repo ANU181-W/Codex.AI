@@ -1,8 +1,21 @@
+import { useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { Folder, AlertCircle, CheckCircle2, Clock, TrendingUp } from "lucide-react"
+import { FileText, AlertCircle, CheckCircle2, Clock, TrendingUp } from "lucide-react"
+import { notify } from "../../services/notify"
 
 export default function RecentScansTable({ scans }) {
   const navigate = useNavigate()
+  const warnedMissingProject = useRef(false)
+
+  useEffect(() => {
+    if (!warnedMissingProject.current) {
+      const hasMissing = scans.some(s => !s.projectName)
+      if (hasMissing) {
+        notify.error('One or more scans are missing a project name')
+        warnedMissingProject.current = true
+      }
+    }
+  }, [scans])
 
   const formatDate = (date) => {
     if (!date) return "N/A"
@@ -53,10 +66,11 @@ export default function RecentScansTable({ scans }) {
           <thead>
             <tr>
               <th className="col-project">
-                <Folder size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                Project
+                <FileText size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                Files Scanned
               </th>
-              <th className="col-files">Files</th>
+              <th className="col-project-name">Project</th>
+              <th className="col-files">Count</th>
               <th className="col-issues">
                 <AlertCircle size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
                 Issues
@@ -78,14 +92,31 @@ export default function RecentScansTable({ scans }) {
               >
                 <td className="col-project">
                   <div className="project-cell">
-                    <Folder size={14} className="project-icon" />
                     <div className="project-info">
-                      <span className="project-name">{scan.projectName || "New Project"}</span>
-                      {scan.fileNames && scan.fileNames.length > 0 && (
-                        <span className="project-files-hint">{scan.fileNames.length} file{scan.fileNames.length !== 1 ? 's' : ''}</span>
+                      {Array.isArray(scan.fileNames) && scan.fileNames.length > 0 ? (
+                        <div className="files-tags" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {scan.fileNames.slice(0, 3).map((name, idx) => (
+                            <span key={idx} className="file-name-tag">{name}</span>
+                          ))}
+                          {scan.fileNames.length > 3 && (
+                            <span className="file-name-tag">+{scan.fileNames.length - 3} more</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="project-name">—</span>
                       )}
                     </div>
                   </div>
+                </td>
+                <td className="col-project-name">
+                  <span className="badge badge-project" style={{
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--foreground)',
+                    padding: '4px 8px',
+                    borderRadius: 8,
+                    fontSize: '0.85rem'
+                  }}>{scan.projectName || '—'}</span>
                 </td>
                 <td className="col-files">
                   <div className="files-cell">

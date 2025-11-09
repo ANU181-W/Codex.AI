@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react"
 import { useScan } from "../contexts/ScanContext"
 import { useProject } from "../contexts/ProjectContext"
+import { notify } from "../services/notify"
 import StatsCard from "../components/Dashboard/StatsCard"
 import AnalyticsChart from "../components/Dashboard/AnalyticsChart"
 import RecentScansTable from "../components/Dashboard/RecentScansTable"
+import ProjectSelect from "../components/Projects/ProjectSelect"
 import "../styles/pages.css"
 
 export default function DashboardPage() {
@@ -22,8 +24,12 @@ export default function DashboardPage() {
     document.title = "Dashboard - CodexAI"
 
     // Fetch scans when project available
-    if (currentProject?.id) {
-      loadScans(currentProject.id).then(() => loadLatest(currentProject.id)).catch(() => {})
+      if (currentProject?.id) {
+        loadScans(currentProject.id, currentProject.name)
+          .then(() => loadLatest(currentProject.id, currentProject.name))
+        .catch(e => notify.error(e.message || 'Failed to refresh scans'))
+    } else if (projects.length === 0) {
+      notify.info('Create a project to begin scanning')
     }
 
     if (scans.length > 0) {
@@ -63,6 +69,9 @@ export default function DashboardPage() {
         <div className="page-header">
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Overview of your code quality metrics</p>
+          <div style={{ marginTop: 12 }}>
+            <ProjectSelect compact />
+          </div>
         </div>
 
         <div className="stats-grid">
