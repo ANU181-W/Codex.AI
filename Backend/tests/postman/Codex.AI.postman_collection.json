@@ -1,0 +1,439 @@
+{
+	"info": {
+		"_postman_id": "7b2c1a3e-8f5d-4b6e-9e8a-1f2d3c4b5a6e",
+		"name": "Codex.AI API Tests",
+		"description": "Test suite for Codex.AI backend APIs",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5000/api",
+			"type": "string"
+		},
+		{
+			"key": "projectId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "fileId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Projects",
+			"item": [
+				{
+					"name": "Create Project",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const response = pm.response.json();",
+									"",
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Project created successfully\", function () {",
+									"    pm.expect(response.id).to.exist;",
+									"    pm.expect(response.name).to.equal(pm.request.body.name);",
+									"    pm.expect(response.description).to.equal(pm.request.body.description);",
+									"    pm.collectionVariables.set(\"projectId\", response.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Project\",\n    \"description\": \"A test project for API validation\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/projects",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects"]
+						},
+						"description": "Create a new project"
+					}
+				},
+				{
+					"name": "Get All Projects",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is an array\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(Array.isArray(response)).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects"]
+						},
+						"description": "Get all projects"
+					}
+				},
+				{
+					"name": "Get Project By Id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Project details are correct\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.id).to.equal(pm.collectionVariables.get(\"projectId\"));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}"]
+						},
+						"description": "Get a specific project by ID"
+					}
+				},
+				{
+					"name": "Update Project",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Project updated successfully\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.name).to.equal(\"Updated Project Name\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Project Name\",\n    \"description\": \"Updated project description\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}"]
+						},
+						"description": "Update a project"
+					}
+				},
+				{
+					"name": "Delete Project",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}"]
+						},
+						"description": "Delete a project"
+					}
+				}
+			]
+		},
+		{
+			"name": "Files",
+			"item": [
+				{
+					"name": "Upload Files",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Files uploaded successfully\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.totalFiles).to.be.above(0);",
+									"    if (response.files && response.files.length > 0) {",
+									"        pm.collectionVariables.set(\"fileId\", response.files[0].id);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "files",
+									"type": "file",
+									"src": ["test.html", "test.css"]
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}/files",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}", "files"]
+						},
+						"description": "Upload files to a project"
+					}
+				},
+				{
+					"name": "Get Project Files",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Files list is returned\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(Array.isArray(response)).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}/files",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}", "files"]
+						},
+						"description": "Get all files in a project"
+					}
+				},
+				{
+					"name": "Get File By Id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"File details are correct\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.id).to.equal(pm.collectionVariables.get(\"fileId\"));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/files/{{fileId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "files", "{{fileId}}"]
+						},
+						"description": "Get a specific file by ID"
+					}
+				},
+				{
+					"name": "Delete File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/files/{{fileId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "files", "{{fileId}}"]
+						},
+						"description": "Delete a file"
+					}
+				}
+			]
+		},
+		{
+			"name": "Scans",
+			"item": [
+				{
+					"name": "Start Project Scan",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 202\", function () {",
+									"    pm.response.to.have.status(202);",
+									"});",
+									"",
+									"pm.test(\"Scan started successfully\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.status).to.equal(\"STARTED\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}/scan",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}", "scan"]
+						},
+						"description": "Start a new scan for a project"
+					}
+				},
+				{
+					"name": "Get All Scan Results",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Scan results are returned\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(Array.isArray(response)).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}/scans",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}", "scans"]
+						},
+						"description": "Get all scan results for a project"
+					}
+				},
+				{
+					"name": "Get Latest Scan Result",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Latest scan result returned\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.projectId).to.equal(pm.collectionVariables.get(\"projectId\"));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}/scans/latest",
+							"host": ["{{baseUrl}}"],
+							"path": ["projects", "{{projectId}}", "scans", "latest"]
+						},
+						"description": "Get the latest scan result for a project"
+					}
+				}
+			]
+		}
+	]
+}

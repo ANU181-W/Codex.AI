@@ -1,0 +1,354 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE MODELS
+// ============================================
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  status      ProjectStatus @default(ACTIVE)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  files        File[]
+  designTokens DesignToken[]
+  scanResults  ScanResult[]
+  
+  @@index([createdAt])
+  @@index([status])
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+model File {
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  path       String   @db.VarChar(500)
+  filename   String   @db.VarChar(255)
+  type       FileType
+  content    String   @db.LongText
+  hash       String   @db.VarChar(64) // SHA-256 hash
+  size       Int      // Size in bytes
+  encoding   String   @default("utf-8") @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  Issue[]
+  
+  @@index([projectId])
+  @@index([hash])
+  @@index([type])
+  @@unique([projectId, path])
+  @@map("files")
+}
+
+enum FileType {
+  HTML
+  JSX
+  TSX
+  CSS
+  SCSS
+  LESS
+  JSON
+  YAML
+}
+
+// ============================================
+// ISSUE TRACKING
+// ============================================
+
+model Issue {
+  id          String        @id @default(uuid())
+  fileId      String        @map("file_id")
+  category    IssueCategory
+  severity    Severity
+  title       String        @db.VarChar(255)
+  message     String        @db.Text
+  line        Int?
+  column      Int?
+  endLine     Int?          @map("end_line")
+  endColumn   Int?          @map("end_column")
+  code        String?       @db.Text
+  rule        String?       @db.VarChar(100)
+  ruleUrl     String?       @map("rule_url") @db.VarChar(500)
+  status      IssueStatus   @default(OPEN)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  resolvedAt  DateTime?     @map("resolved_at")
+  
+  // Relations
+  file  File  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  fixes Fix[]
+  
+  @@index([fileId])
+  @@index([category])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+  @@map("issues")
+}
+
+enum IssueCategory {
+  STRUCTURAL
+  ACCESSIBILITY
+  SEO
+  SECURITY
+  PERFORMANCE
+  I18N
+  DESIGN_SYSTEM
+  BEST_PRACTICE
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum IssueStatus {
+  OPEN
+  FIXED
+  IGNORED
+  WONT_FIX
+}
+
+// ============================================
+// FIX MANAGEMENT
+// ============================================
+
+model Fix {
+  id              String    @id @default(uuid())
+  issueId         String    @map("issue_id")
+  patchDiff       String    @db.LongText @map("patch_diff")
+  rationale       String    @db.Text
+  aiGenerated     Boolean   @default(false) @map("ai_generated")
+  aiModel         String?   @db.VarChar(50) @map("ai_model")
+  generatedContent String?  @db.Text @map("generated_content")
+  confidence      Float?    @db.Float // 0.0 to 1.0
+  applied         Boolean   @default(false)
+  appliedAt       DateTime? @map("applied_at")
+  verified        Boolean   @default(false)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  
+  // Relations
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  
+  @@index([issueId])
+  @@index([applied])
+  @@index([aiGenerated])
+  @@map("fixes")
+}
+
+// ============================================
+// DESIGN SYSTEM
+// ============================================
+
+model DesignToken {
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  name       String   @db.VarChar(255)
+  category   TokenCategory
+  value      String   @db.VarChar(500)
+  cssVariable String? @db.VarChar(255) @map("css_variable")
+  tokensJson String   @db.LongText @map("tokens_json") // Full JSON/YAML
+  version    String?  @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+  @@index([category])
+  @@unique([projectId, name])
+  @@map("design_tokens")
+}
+
+enum TokenCategory {
+  COLOR
+  TYPOGRAPHY
+  SPACING
+  BORDER_RADIUS
+  SHADOW
+  BREAKPOINT
+  Z_INDEX
+  ANIMATION
+  OTHER
+}
+
+// ============================================
+// SCAN RESULTS & ANALYTICS
+// ============================================
+
+model ScanResult {
+  id                String   @id @default(uuid())
+  projectId         String   @map("project_id")
+  totalFiles        Int      @default(0) @map("total_files")
+  totalIssues       Int      @default(0) @map("total_issues")
+  criticalIssues    Int      @default(0) @map("critical_issues")
+  highIssues        Int      @default(0) @map("high_issues")
+  mediumIssues      Int      @default(0) @map("medium_issues")
+  lowIssues         Int      @default(0) @map("low_issues")
+  infoIssues        Int      @default(0) @map("info_issues")
+  fixesGenerated    Int      @default(0) @map("fixes_generated")
+  fixesApplied      Int      @default(0) @map("fixes_applied")
+  scanDuration      Int      @map("scan_duration") // milliseconds
+  cacheHits         Int      @default(0) @map("cache_hits")
+  aiCallsMade       Int      @default(0) @map("ai_calls_made")
+  aiCostUsd         Float?   @db.Float @map("ai_cost_usd")
+  metadata          Json?    // Additional scan metadata
+  createdAt         DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("scan_results")
+}
+
+// ============================================
+// CACHING SYSTEM
+// ============================================
+
+model Cache {
+  id          String   @id @default(uuid())
+  fileHash    String   @unique @db.VarChar(64) @map("file_hash")
+  scanResults String   @db.LongText @map("scan_results") // JSON stringified results
+  hitCount    Int      @default(0) @map("hit_count")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  lastAccessedAt DateTime @default(now()) @map("last_accessed_at")
+  
+  @@index([fileHash])
+  @@index([expiresAt])
+  @@index([lastAccessedAt])
+  @@map("cache")
+}
+
+// ============================================
+// USER PREFERENCES & SETTINGS
+// ============================================
+
+model UserPreference {
+  id              String   @id @default(uuid())
+  userId          String?  @map("user_id") @db.VarChar(255)
+  sessionId       String?  @map("session_id") @db.VarChar(255)
+  preferenceKey   String   @map("preference_key") @db.VarChar(100)
+  preferenceValue String   @db.Text @map("preference_value")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  @@index([userId])
+  @@index([sessionId])
+  @@index([preferenceKey])
+  @@unique([userId, preferenceKey])
+  @@map("user_preferences")
+}
+
+// ============================================
+// CLARIFICATION QUESTIONS
+// ============================================
+
+model ClarificationQuestion {
+  id          String   @id @default(uuid())
+  issueId     String?  @map("issue_id")
+  question    String   @db.Text
+  context     String?  @db.Text
+  options     Json?    // JSON array of options
+  answer      String?  @db.Text
+  answeredAt  DateTime? @map("answered_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  @@index([issueId])
+  @@index([answeredAt])
+  @@map("clarification_questions")
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  entityType  String   @db.VarChar(50) @map("entity_type")
+  entityId    String   @db.VarChar(36) @map("entity_id")
+  action      String   @db.VarChar(50)
+  userId      String?  @db.VarChar(255) @map("user_id")
+    metadata    Json?
+  ipAddress   String?  @db.VarChar(45) @map("ip_address")
+  userAgent   String?  @db.VarChar(500) @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// VERIFICATION RESULTS
+// ============================================
+
+model VerificationResult {
+  id                  String   @id @default(uuid())
+  projectId           String   @map("project_id")
+  beforeScanId        String   @map("before_scan_id")
+  afterScanId         String   @map("after_scan_id")
+  issuesResolved      Int      @default(0) @map("issues_resolved")
+  issuesRemaining     Int      @default(0) @map("issues_remaining")
+  improvementPercent  Float    @db.Float @map("improvement_percent")
+  performanceScore    Int?     @map("performance_score") // Lighthouse-style score
+  accessibilityScore  Int?     @map("accessibility_score")
+  seoScore            Int?     @map("seo_score")
+  securityScore       Int?     @map("security_score")
+  metadata            Json?
+  createdAt           DateTime @default(now()) @map("created_at")
+  
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("verification_results")
+}
+
+// ============================================
+// AI USAGE TRACKING
+// ============================================
+
+model AIUsage {
+  id                String   @id @default(uuid())
+  model             String   @db.VarChar(50)
+  promptTokens      Int      @map("prompt_tokens")
+  completionTokens  Int      @map("completion_tokens")
+  totalTokens       Int      @map("total_tokens")
+  costUsd           Float    @db.Float @map("cost_usd")
+  latencyMs         Int      @map("latency_ms")
+  success           Boolean  @default(true)
+  errorMessage      String?  @db.Text @map("error_message")
+  context           String?  @db.VarChar(100) // e.g., "alt_text_generation", "fix_suggestion"
+  createdAt         DateTime @default(now()) @map("created_at")
+  
+  @@index([model])
+  @@index([createdAt])
+  @@index([context])
+  @@map("ai_usage")
+}
