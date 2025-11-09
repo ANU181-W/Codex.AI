@@ -132,8 +132,9 @@ export function ScanProvider({ children }) {
         timestamp: s.createdAt,
       }
       setCurrentScan(started)
-      setIssues(started.issues)
-      if (Array.isArray(s.aiSuggestions)) setSuggestions(s.aiSuggestions)
+  // Preserve existing client-side issues/suggestions (from upload) if present to avoid flicker
+  setIssues(prev => (prev && prev.length > 0 ? prev : (started.issues || [])))
+  if (Array.isArray(s.aiSuggestions)) setSuggestions(prev => (prev && prev.length > 0 ? prev : s.aiSuggestions))
       setScans(prev => [started, ...prev])
       notify.success('Scan completed')
       return started

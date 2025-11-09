@@ -3,6 +3,7 @@ const fileParserService = require('../services/fileParser.service');
 
 // In-memory fallback store
 const inMemoryFiles = [];
+const inMemoryIssues = [];
 
 const usePrisma = () => !!(prisma && prisma.file);
 
@@ -138,9 +139,28 @@ exports.uploadFiles = async (req, res) => {
 
         // Then create any issues found during analysis (fresh set)
         let createdIssues = []
+        // If static analyzers returned issues, persist those. If not, but AI produced suggestions,
+        // synthesize lightweight issues from suggestions so the UI isn't empty and users can see AI guidance.
+        const suggestions = Array.isArray(analysis.suggestions) ? analysis.suggestions : [];
+        let issuesToPersist = [];
         if (analysis.issues && analysis.issues.length > 0) {
-          console.log(`Creating ${analysis.issues.length} issues for file id=${savedFile.id}`);
-          createdIssues = await Promise.all(analysis.issues.map(issue => 
+          issuesToPersist = analysis.issues;
+        } else if (suggestions.length > 0) {
+          issuesToPersist = suggestions.map((s, i) => ({
+            // synthesized issue shape
+            rule: s.rule || `ai-synth-${i}`,
+            severity: s.severity || 'LOW',
+            category: s.category || 'GENERAL',
+            title: s.description || `AI suggestion: ${String(s.category || 'general')}`,
+            message: s.rationale || s.description || '',
+            line: s.line || null,
+            column: null,
+            code: s.example || (Array.isArray(s.changes) ? s.changes.join('\n') : '')
+          }));
+        }
+        if (issuesToPersist && issuesToPersist.length > 0) {
+          console.log(`Creating ${issuesToPersist.length} issues for file id=${savedFile.id}`);
+          createdIssues = await Promise.all(issuesToPersist.map(issue => 
             prisma.issue.create({
               data: {
                 fileId: savedFile.id,
@@ -156,40 +176,39 @@ exports.uploadFiles = async (req, res) => {
               }
             })
           ));
-
-          // Create AI-generated Fix records when suggestions are present
-          const suggestions = Array.isArray(analysis.suggestions) ? analysis.suggestions : []
-          if (suggestions.length > 0) {
-            const byCategory = suggestions.reduce((acc, s) => {
-              const key = String(s.category || '').toUpperCase()
-              if (!acc[key]) acc[key] = []
-              acc[key].push(s)
-              return acc
-            }, {})
-            await Promise.all(createdIssues.map((iss) => {
-              const cat = iss.category // already Prisma enum
-              const pool = byCategory[cat] || byCategory[cat?.toUpperCase?.() || ''] || []
-              const picked = pool.length ? pool.shift() : null
-              if (!picked) return Promise.resolve()
-              const generatedContent = picked.example || (Array.isArray(picked.changes) ? picked.changes.join('\n') : null)
-              const rationale = picked.rationale || picked.description || ''
-              if (!generatedContent && !rationale) return Promise.resolve()
-              return prisma.fix.create({
-                data: {
-                  issueId: iss.id,
-                  patchDiff: generatedContent ? `--- before\n+++ after\n${generatedContent}` : '',
-                  rationale,
-                  aiGenerated: true,
-                  aiModel: analysis?.aiMeta?.model || null,
-                  generatedContent,
-                  confidence: analysis?.aiMeta?.usage ? 0.8 : 0.7,
-                  applied: false,
-                }
-              })
-            }))
-          }
         } else {
           console.log(`No issues to create for file id=${savedFile.id}`);
+        }
+
+        // Create AI-generated Fix records when suggestions are present and we've created issues
+        if (suggestions.length > 0 && createdIssues && createdIssues.length > 0) {
+          const byCategory = suggestions.reduce((acc, s) => {
+            const key = String(s.category || '').toUpperCase()
+            if (!acc[key]) acc[key] = []
+            acc[key].push(s)
+            return acc
+          }, {})
+          await Promise.all(createdIssues.map((iss) => {
+            const cat = iss.category // already Prisma enum
+            const pool = byCategory[cat] || byCategory[cat?.toUpperCase?.() || ''] || []
+            const picked = pool.length ? pool.shift() : null
+            if (!picked) return Promise.resolve()
+            const generatedContent = picked.example || (Array.isArray(picked.changes) ? picked.changes.join('\n') : null)
+            const rationale = picked.rationale || picked.description || ''
+            if (!generatedContent && !rationale) return Promise.resolve()
+            return prisma.fix.create({
+              data: {
+                issueId: iss.id,
+                patchDiff: generatedContent ? `--- before\n+++ after\n${generatedContent}` : '',
+                rationale,
+                aiGenerated: true,
+                aiModel: analysis?.aiMeta?.model || null,
+                generatedContent,
+                confidence: analysis?.aiMeta?.usage ? 0.8 : 0.7,
+                applied: false,
+              }
+            })
+          }))
         }
 
         // Get the file with its issues
@@ -214,8 +233,41 @@ exports.uploadFiles = async (req, res) => {
           updatedAt: new Date(),
         };
         inMemoryFiles.push(newFile);
+
+        // For in-memory path, synthesize/persist issues similarly so UI sees them immediately
+        const suggestions = Array.isArray(analysis.suggestions) ? analysis.suggestions : [];
+        let createdIssues = [];
+        let issuesToPersist = [];
+        if (analysis.issues && analysis.issues.length > 0) {
+          issuesToPersist = analysis.issues;
+        } else if (suggestions.length > 0) {
+          issuesToPersist = suggestions.map((s, i) => ({
+            id: `synth-${newFile.id}-${i}`,
+            rule: s.rule || `ai-synth-${i}`,
+            severity: s.severity || 'LOW',
+            category: s.category || 'GENERAL',
+            title: s.description || `AI suggestion: ${String(s.category || 'general')}`,
+            message: s.rationale || s.description || '',
+            line: s.line || null,
+            column: null,
+            code: s.example || (Array.isArray(s.changes) ? s.changes.join('\n') : ''),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            fileId: newFile.id
+          }));
+        }
+
+        if (issuesToPersist && issuesToPersist.length > 0) {
+          createdIssues = issuesToPersist.map(i => {
+            const newIss = { id: String(Date.now() + Math.random()), ...i };
+            inMemoryIssues.push(newIss);
+            return newIss;
+          });
+        }
+
         uploadedFiles.push({
           ...newFile,
+          issues: createdIssues,
           analysis: analysis || null,
           aiRaw: (analysis && analysis.aiRaw) || null,
           aiMeta: (analysis && analysis.aiMeta) || null

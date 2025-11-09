@@ -101,8 +101,17 @@ class AIService {
       // Calculate metrics based on issues
       this.calculateMetrics(analysis);
 
-      // Decide whether to call AI: any issues OR FORCE_AI OR ALWAYS_AI env OR explicit zero-issue test
-      const shouldCallAI = (analysis.issues && analysis.issues.length > 0) || process.env.FORCE_AI === 'true' || process.env.ALWAYS_AI === 'true';
+      // Decide whether to call AI:
+      // - call when static analyzers found issues
+      // - OR when the file type is one that benefits from LLM analysis (HTML/CSS/JS/TS/JSX/TSX/SCSS)
+      // - OR when explicit env flags force AI
+      const fileType = (filename && filename.split('.').pop()) || (type || '');
+      const aiPreferredTypes = ['html', 'css', 'scss', 'js', 'ts', 'jsx', 'tsx'];
+      const ext = String(fileType || '').toLowerCase();
+      const shouldCallAI = (analysis.issues && analysis.issues.length > 0)
+        || aiPreferredTypes.includes(ext)
+        || process.env.FORCE_AI === 'true'
+        || process.env.ALWAYS_AI === 'true';
       if (shouldCallAI) {
         const aiResult = await this.getAISuggestions({
           content,
@@ -207,6 +216,16 @@ class AIService {
       }
 
       const parsed = this.parseSuggestions(aiText);
+      // If parser couldn't produce structured suggestions, create a fallback that includes the raw AI text
+      if ((!parsed || parsed.length === 0) && aiText && aiText.trim().length > 0) {
+        parsed.push({
+          category: 'GENERAL',
+          description: aiText.split('\n').slice(0, 2).join(' ').slice(0, 300),
+          changes: [aiText],
+          rationale: '',
+          example: aiText
+        });
+      }
       return { suggestions: parsed, raw: aiText, model, latencyMs, usage: usageInfo };
     } catch (error) {
       console.error('OpenAI API call failed:', error && (error.message || error.error || error.response) ? (error.message || JSON.stringify(error.error || error.response || {})) : error);
@@ -289,7 +308,14 @@ Provide suggestions in the following format:
       suggestions.push(currentSuggestion);
     }
 
-    return suggestions;
+    // Normalize suggestion objects to expected shape
+    return suggestions.map(s => ({
+      category: s.category || 'GENERAL',
+      description: s.description || s.summary || '',
+      changes: Array.isArray(s.changes) ? s.changes : (s.example ? [s.example] : []),
+      rationale: s.rationale || '',
+      example: s.example || ''
+    }));
   }
 
   generateStaticSuggestions(issues) {
