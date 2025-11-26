@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { Home, BarChart3, ScanSearch, CheckCircle2, Menu, X } from "lucide-react"
-import Logo from "../components/Logo"
+import bitwiseLogo from "../assets/bitwise.jpg"
 import "../styles/layout.css"
 
 export default function MainLayout({ children }) {
@@ -19,7 +19,8 @@ export default function MainLayout({ children }) {
     <div className="layout-container">
       <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
         <div className="sidebar-header">
-          <Logo />
+          <img src={bitwiseLogo} alt="Bitwise Logo" className="logo-img" width={20} height={20} />
+          {sidebarOpen && <span className="logo-text">CodexAI</span>}
           <button 
             className="toggle-btn" 
             onClick={() => setSidebarOpen(!sidebarOpen)}

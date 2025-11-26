@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom"
-import { Sparkles, ArrowRight } from "lucide-react"
+import { ArrowRight } from "lucide-react"
+import bitwiseLogo from "../../assets/bitwise.jpg"
 
 export default function HeroSection() {
   const navigate = useNavigate()
@@ -8,7 +9,7 @@ export default function HeroSection() {
     <section className="hero-section-modern">
       <div className="hero-content-modern">
         <div className="hero-badge">
-          <Sparkles size={16} />
+          <img src={bitwiseLogo} alt="Bitwise Logo" width={20} height={20} className="hero-badge-logo" />
           <span>AI-Powered Code Analysis</span>
         </div>
         <h1 className="hero-title-modern">
