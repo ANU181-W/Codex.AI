@@ -1,5 +1,7 @@
 const OpenAI = require('openai');
 const { cache: cacheService } = require('./cache/cache.service');
+const redisAdapter = require('./cache/redis.adapter');
+const fileStorageHelper = require('./storage/fileStorage.helper');
 // Optional prisma for recording AI usage; fallback if not available
 let prismaClient = null;
 try {
@@ -20,24 +22,73 @@ const {
 
 class AIService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
-    this.cache = cacheService;
-    this.modelRouter = {
-      small: 'gpt-3.5-turbo',
-      medium: 'gpt-4',
-      large: 'gpt-4-32k',
-    };
+    // Support both standard OpenAI and Azure OpenAI
+    const provider = process.env.OPENAI_PROVIDER || 'openai';
+    const apiKey = process.env.OPENAI_API_KEY;
+    
+    if (provider === 'azure') {
+      const baseURL = process.env.OPENAI_BASE_URL;
+      const apiVersion = process.env.OPENAI_API_VERSION || '2024-08-01-preview';
+      
+      if (!baseURL) {
+        console.error('AIService: OPENAI_BASE_URL required for Azure OpenAI');
+      }
+      
+      this.openai = new OpenAI({
+        apiKey,
+        baseURL: baseURL ? `${baseURL}/openai/deployments/${process.env.OPENAI_DEPLOYMENT_NAME}` : undefined,
+        defaultQuery: { 'api-version': apiVersion },
+        defaultHeaders: { 'api-key': apiKey }
+      });
+      
+      this.modelRouter = {
+        small: process.env.MODEL_ROUTING_SMALL || process.env.OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini',
+        medium: process.env.MODEL_ROUTING_MEDIUM || process.env.OPENAI_DEPLOYMENT_NAME || 'gpt-4o',
+        large: process.env.MODEL_ROUTING_LARGE || process.env.OPENAI_DEPLOYMENT_NAME || 'gpt-4o',
+      };
+      
+      console.log('AIService: Initialized with Azure OpenAI');
+    } else {
+      // Standard OpenAI
+      this.openai = new OpenAI({ apiKey });
+      
+      this.modelRouter = {
+        small: process.env.MODEL_ROUTING_SMALL || 'gpt-3.5-turbo',
+        medium: process.env.MODEL_ROUTING_MEDIUM || 'gpt-4',
+        large: process.env.MODEL_ROUTING_LARGE || 'gpt-4-32k',
+      };
+      
+      console.log('AIService: Initialized with standard OpenAI');
+    }
+    
+    // Use Redis if available, otherwise fallback to in-memory cache
+    this.cache = process.env.REDIS_URL ? redisAdapter : cacheService;
   }
 
-  async analyzeCode({ content, type, filename }) {
+  async analyzeCode({ content, type, filename, fileRecord }) {
     // Logging: record analyze request
     try {
-      console.log(`AIService.analyzeCode() called for file=${filename} type=${type} contentLen=${content ? content.length : 0}`);
+      console.log(`AIService.analyzeCode() called for file=${filename} type=${type} contentLen=${content ? content.length : 0} hasFileRecord=${!!fileRecord}`);
     } catch (e) {}
+    
+    // If fileRecord is provided and content stored externally, fetch from blob
+    let actualContent = content;
+    if (fileRecord && fileRecord.contentStoredExternally && !content) {
+      try {
+        console.log(`AIService: Fetching content from blob storage for file ${fileRecord.id}`);
+        actualContent = await fileStorageHelper.getFileContent(fileRecord);
+      } catch (error) {
+        console.error('AIService: Failed to fetch content from blob:', error.message);
+        throw new Error('Failed to retrieve file content for analysis');
+      }
+    }
+    
+    if (!actualContent) {
+      throw new Error('No content provided for analysis');
+    }
+    
     // Cache handling (allow bypass via env flag)
-    const cacheKey = `${filename}-${cacheService.hashContent(content)}`;
+    const cacheKey = `${filename}-${this.cache.hashContent(actualContent)}`;
     let cachedResult = null;
     const bypassCache = process.env.FORCE_BYPASS_CACHE === 'true';
     if (!bypassCache) {
@@ -76,14 +127,14 @@ class AIService {
         structureIssues,
         extraHtmlIssues,
       ] = await Promise.all([
-        analyzeAccessibility(content, type),
-        analyzeSecurity(content, type),
-        analyzeSEO(content, type),
-        analyzePerformance(content, type),
-        analyzeI18n(content, type),
-        validateDesignSystem(content, type),
-        analyzeStructure(content, type),
-        analyzeAdditionalHTMLHeuristics(content, type),
+        analyzeAccessibility(actualContent, type),
+        analyzeSecurity(actualContent, type),
+        analyzeSEO(actualContent, type),
+        analyzePerformance(actualContent, type),
+        analyzeI18n(actualContent, type),
+        validateDesignSystem(actualContent, type),
+        analyzeStructure(actualContent, type),
+        analyzeAdditionalHTMLHeuristics(actualContent, type),
       ]);
 
       // Combine all issues
@@ -114,7 +165,7 @@ class AIService {
         || process.env.ALWAYS_AI === 'true';
       if (shouldCallAI) {
         const aiResult = await this.getAISuggestions({
-          content,
+          content: actualContent,
           type,
           issues: analysis.issues,
           filename

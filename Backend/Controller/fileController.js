@@ -1,5 +1,6 @@
 const prisma = require('../utils/prisma');
 const fileParserService = require('../services/fileParser.service');
+const fileStorageHelper = require('../services/storage/fileStorage.helper');
 
 // In-memory fallback store
 const inMemoryFiles = [];
@@ -69,13 +70,6 @@ exports.uploadFiles = async (req, res) => {
         type: ext.slice(1).toUpperCase(),
       });
       
-      // Get initial analysis from AI
-      const analysis = await aiService.analyzeCode({
-        content,
-        type: ext.slice(1),
-        filename: file.originalname,
-      });
-      
       const mapFileTypeForPrisma = (t) => {
         // Prisma FileType enum does not include JS/TS; map to closest buckets used by scanner
         if (t === 'JS') return 'JSX';
@@ -83,12 +77,31 @@ exports.uploadFiles = async (req, res) => {
         return t;
       };
 
+      // Store file using storage helper (handles blob or DB storage)
+      const storageResult = await fileStorageHelper.storeFile(file.buffer, {
+        projectId,
+        filename: file.originalname,
+        type: mapFileTypeForPrisma(parsedFile.type),
+        hash: parsedFile.hash,
+        size: file.size
+      });
+
+      // Get initial analysis from AI (pass content, storage helper will fetch if needed)
+      const analysis = await aiService.analyzeCode({
+        content: storageResult.content || content, // Use stored content or original
+        type: ext.slice(1),
+        filename: file.originalname,
+      });
+
       const fileData = {
         projectId,
         filename: file.originalname,
         path: file.originalname,
         type: mapFileTypeForPrisma(parsedFile.type),
-        content,
+        content: storageResult.content, // Null if stored externally
+        storageKey: storageResult.storageKey,
+        contentStoredExternally: storageResult.contentStoredExternally,
+        textPreview: storageResult.textPreview,
         hash: parsedFile.hash,
         size: file.size,
         encoding: 'utf-8'
