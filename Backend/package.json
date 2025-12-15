@@ -14,6 +14,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@azure/identity": "^4.5.0",
+    "@azure/storage-blob": "^12.24.0",
     "@babel/parser": "^7.28.5",
     "@prisma/client": "^6.19.0",
     "axe-core": "^4.11.0",
@@ -23,6 +25,7 @@
     "eslint": "^9.39.1",
     "express": "^5.1.0",
     "htmlparser2": "^10.0.0",
+    "ioredis": "^5.4.1",
     "multer": "^2.0.2",
     "openai": "^6.8.1",
     "postcss": "^8.5.6",

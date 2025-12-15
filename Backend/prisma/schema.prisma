@@ -7,6 +7,7 @@ generator client {
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+  
 }
 
 // ============================================
@@ -43,10 +44,16 @@ model File {
   path       String   @db.VarChar(500)
   filename   String   @db.VarChar(255)
   type       FileType
-  content    String   @db.LongText
+  content    String?  @db.LongText // Made nullable for blob storage migration
   hash       String   @db.VarChar(64) // SHA-256 hash
   size       Int      // Size in bytes
   encoding   String   @default("utf-8") @db.VarChar(20)
+  
+  // Azure Blob Storage fields
+  storageKey              String?  @db.VarChar(1000) @map("storage_key") // Blob path
+  contentStoredExternally Boolean  @default(false) @map("content_stored_externally")
+  textPreview             String?  @db.Text @map("text_preview") // First 4KB for search
+  
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
   
@@ -57,6 +64,7 @@ model File {
   @@index([projectId])
   @@index([hash])
   @@index([type])
+  @@index([contentStoredExternally])
   @@unique([projectId, path])
   @@map("files")
 }
